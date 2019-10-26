@@ -1,0 +1,31 @@
+version: "3.6"
+services:
+  postgres:
+    container_name: "postgres"
+    image: postgres
+    environment:
+      - POSTGRES_DB=mycomputer_app
+      - POSTGRES_USER=babou
+      - POSTGRES_PASSWORD=testing
+    expose: 
+      - "5432"
+    volumes:
+      - postgres_volume:/var/lib/postgresql
+  backend:
+    container_name: "backend"
+    build: ./backend
+    ports:
+      - "8000:8000"
+    command: python3 main.py
+  frontend:
+    container_name: "frontend"
+    build: ./frontend
+    environment:
+      - BACKEND_SERVICE=backend
+      - BACKEND_SERVICE_PORT=8001
+    ports:
+      - "8001:8001"
+    command: npm run serve
+
+volumes:
+  postgres_volume:

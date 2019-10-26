@@ -1,0 +1,1 @@
+### This is a personnal project using Vuejs for front and Flask / SqlAclhemy for backend
