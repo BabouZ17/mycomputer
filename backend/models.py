@@ -1,89 +1,133 @@
 # models
 
-from datetime import Datetime
+import json
+
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine
+from datetime import datetime
 from pytz import timezone
+from uuid import UUID
 from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey, Table
 from sqlalchemy.orm import relationship
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.ext.declarative import declarative_base, DeclarativeMeta
+
 
 Base = declarative_base()
 
 
-class Owner(Base):
+class EncodableModel():
+    RELATIONSHIPS_TO_DICT = False
+
+    def __iter__(self):
+        return self.to_dict().iteritems()
+
+    def to_dict(self, rel=None, backref=None, exclude=()):
+        if rel is None:
+            rel = self.RELATIONSHIPS_TO_DICT
+        res = {column.key: getattr(self, attr)
+               for attr, column in self.__mapper__.c.items()
+               if column.key not in exclude}
+        if rel:
+            for attr, relation in self.__mapper__.relationships.items():
+                # Avoid recursive loop between to tables.
+                if backref == relation.table:
+                    continue
+                value = getattr(self, attr)
+                if value is None:
+                    res[relation.key] = None
+                elif isinstance(value.__class__, DeclarativeMeta):
+                    res[relation.key] = value.to_dict(backref=self.__table__)
+                else:
+                    res[relation.key] = [i.to_dict(backref=self.__table__)
+                                         for i in value]
+        return res
+
+    def to_json(self, rel=None, exclude=None):
+        def extended_encoder(x):
+            if isinstance(x, datetime):
+                return x.isoformat()
+            if isinstance(x, UUID):
+                return str(x)
+        if rel is None:
+            rel = self.RELATIONSHIPS_TO_DICT
+        return json.dumps(self.to_dict(rel, exclude=exclude),
+                          default=extended_encoder)
+
+
+class Owner(Base, EncodableModel):
     __tablename__ = 'owner'
     id = Column(Integer, primary_key=True)
     first_name = Column('first_name', String(32))
     last_name = Column('last_name', String(32))
     email = Column('email', String(32), unique=True)
     computers = relationship('Computer')
-    created_on = Column('created_on', Datetime, default=Datetime.now(
+    created_on = Column('created_on', DateTime, default=datetime.now(
         tz=timezone('America/Montreal')))
 
 
-class Memory(Base):
+class Memory(Base, EncodableModel):
     __tablename__ = 'memory'
     id = Column(Integer, primary_key=True)
     model = Column('model', String(32), unique=True)
     frequency = Column('frequency', Integer, default=2133)
     maker = Column('maker', String(20))
-    created_on = Column('created_on', Datetime, default=Datetime.now(
+    created_on = Column('created_on', DateTime, default=datetime.now(
         tz=timezone('America/Montreal')))
 
 
-class Cpu(Base):
+class Cpu(Base, EncodableModel):
     __tablename__ = 'cpu'
     id = Column(Integer, primary_key=True)
     model = Column('model', String(32), unique=True)
     frequency = Column('frequency', Float, default=2.0)
     nb_cores = Column('nb_cores', Integer, default=1)
     maker = Column('maker', String(20))
-    created_on = Column('created_on', Datetime, default=Datetime.now(
+    created_on = Column('created_on', DateTime, default=datetime.now(
         tz=timezone('America/Montreal')))
 
 
-class Gpu(Base):
+class Gpu(Base, EncodableModel):
     __tablename__ = 'gpu'
     id = Column(Integer, primary_key=True)
     model = Column('model', String(32))
-    ram = Column('ram', String(10), default=1)
+    memory = Column('memory', String(10), default=1)
     maker = Column('maker', String(20))
-    created_on = Column('created_on', Datetime, default=Datetime.now(
+    created_on = Column('created_on', DateTime, default=datetime.now(
         tz=timezone('America/Montreal')))
 
 
-class Motherboard(Base):
+class Motherboard(Base, EncodableModel):
     __tablename__ = 'motherboard'
     id = Column(Integer, primary_key=True)
     model = Column('model', String(32))
     pcie_qty = Column('pcie_qty', Integer, default=1)
     sata_qty = Column('sata_qty', Integer, default=1)
     fans_qty = Column('fans_qty', Integer, default=1)
-    created_on = Column('created_on', Datetime, default=Datetime.now(
+    created_on = Column('created_on', DateTime, default=datetime.now(
         tz=timezone('America/Montreal')))
 
 
-class HDD(Base):
+class HDD(Base, EncodableModel):
     __tablename__ = 'hdd'
     id = Column(Integer, primary_key=True)
     model = Column('model', String(32))
     maker = Column('maker', String(20))
     capacity = Column('capacity', Integer, default=1)
-    created_on = Column('created_on', Datetime, default=Datetime.now(
+    created_on = Column('created_on', DateTime, default=datetime.now(
         tz=timezone('America/Montreal')))
 
 
-class SSD(Base):
+class SSD(Base, EncodableModel):
     __tablename__ = 'ssd'
     id = Column(Integer, primary_key=True)
     model = Column('model', String(32))
-    maker = Column('model', String(20))
+    maker = Column('maker', String(20))
     capacity = Column('capacity', Integer, default=1)
-    created_on = Column('created_on', Datetime, default=Datetime.now(
+    created_on = Column('created_on', DateTime, default=datetime.now(
         tz=timezone('America/Montreal')))
 
 
 # Many to Many tables
-
 memory_association_table = Table('memory_association', Base.metadata,
                                  Column('memory_id', Integer,
                                         ForeignKey('memory.id')),
@@ -123,22 +167,25 @@ gpu_association_table = Table('gpu_association', Base.metadata,
                               )
 
 
-class Computer(Base):
+class Computer(Base, EncodableModel):
     __tablename__ = 'computer'
     id = Column(Integer, primary_key=True)
     owner = Column('model', String(50))
-    hdd_id = Column(Integer, ForeignKey('hdd.id'))
-    hdd = relationship('hdds', back_populates='computers')
-    ssd_id = Column(Integer, ForeignKey('sdd.id'))
-    ssd = relationship('ssds', back_populates='computers')
-    memory_id = Column(Integer, ForeignKey('memory.id'))
-    memory = relationship('memory', back_populates='computers')
-    motherboard_id = Column(Integer, ForeignKey('motherboard.id'))
-    motherboard = relationship('motherboard', back_populates='computers')
-    cpu_id = Column(Integer, ForeignKey('cpu.id'))
-    cpu = relationship('cpus', back_populates='computers')
-    gpu_id = Column(Integer, ForeignKey('gpu.id'))
-    gpu = relationship('gpus', back_populates='computers')
     owner_id = Column(Integer, ForeignKey('owner.id'))
-    created_on = Column('created_on', Datetime, default=Datetime.now(
+    hdd = relationship('HDD', secondary=hdd_association_table)
+    ssd = relationship('SSD', secondary=ssd_association_table)
+    memory = relationship('Memory', secondary=memory_association_table)
+    motherboard = relationship(
+        'Motherboard', secondary=motherboard_association_table)
+    cpu = relationship('Cpu', secondary=cpu_association_table)
+    gpu = relationship('Gpu', secondary=gpu_association_table)
+    created_on = Column('created_on', DateTime, default=datetime.now(
         tz=timezone('America/Montreal')))
+
+
+engine = create_engine(
+    'postgresql://babou:testing@postgres:5432/mycomputer_app')
+
+session = sessionmaker()
+session.configure(bind=engine)
+Base.metadata.create_all(engine)

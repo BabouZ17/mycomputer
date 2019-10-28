@@ -1,5 +1,11 @@
 version: "3.6"
 services:
+  adminer:
+    container_name: "adminer"
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080
   postgres:
     container_name: "postgres"
     image: postgres
@@ -17,6 +23,8 @@ services:
     ports:
       - "8000:8000"
     command: python3 main.py
+    volumes:
+      - ./backend:/home/mycomputer_app/backend
   frontend:
     container_name: "frontend"
     build: ./frontend
